@@ -1,6 +1,11 @@
 import { TSESLint } from '@typescript-eslint/experimental-utils';
 import resolveFrom from 'resolve-from';
-import { createRule, isDescribeCall, isTestCaseCall } from '../utils';
+import {
+  createRule,
+  getNodeName,
+  isDescribeCall,
+  isTestCaseCall,
+} from '../utils';
 
 const ruleTester = new TSESLint.RuleTester({
   parser: resolveFrom(require.resolve('eslint'), 'espree'),
@@ -20,6 +25,7 @@ const rule = createRule({
     messages: {
       details: [
         'callType', //
+        'nodeName',
       ]
         .map(data => `${data}: {{ ${data} }}`)
         .join('\n'),
@@ -38,12 +44,33 @@ const rule = createRule({
         context.report({
           messageId: 'details',
           node,
-          data: { callType },
+          data: {
+            callType,
+            nodeName: getNodeName(node),
+          },
         });
       }
     },
   }),
 });
+
+/**
+ * Determines what the expected "node name" should be for the given code by normalizing
+ * the line of code to be using dot property accessors and then applying regexp.
+ *
+ * @param {string} code
+ *
+ * @return {string}
+ */
+const expectedNodeName = (code: string): string => {
+  const normalizedCode = code
+    .replace(/\[["']/gu, '.') //
+    .replace(/["']\]/gu, '');
+
+  const [expectedName] = /^[\w.]+/u.exec(normalizedCode) ?? ['NAME NOT FOUND'];
+
+  return expectedName;
+};
 
 ruleTester.run('nonexistent methods', rule, {
   valid: [
@@ -86,7 +113,10 @@ const testUtilsAgainst = (
       errors: [
         {
           messageId: 'details' as const,
-          data: { callType },
+          data: {
+            callType,
+            nodeName: expectedNodeName(code),
+          },
           column: 1,
           line: 1,
         },
